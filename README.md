@@ -140,4 +140,4 @@ Potential features for future versions:
 
 ## License
 
-This tool is open-source
+This project is open source and available under the MIT License.
