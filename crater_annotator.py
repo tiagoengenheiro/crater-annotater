@@ -30,35 +30,35 @@ from PIL import Image
 
 
 class AnnotationListItem(QWidget):
-    """Custom widget for displaying annotation in list with Edit/Delete buttons."""
+    """Custom widget for displaying annotation in list with Delete button."""
     
-    edit_clicked = pyqtSignal(int)  # index
+    clicked = pyqtSignal(int)  # index
     delete_clicked = pyqtSignal(int)  # index
     
     def __init__(self, index: int, ellipse: 'Ellipse', parent=None):
         super().__init__(parent)
         self.index = index
         self.ellipse = ellipse
+        self.setCursor(Qt.PointingHandCursor)
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(5, 2, 5, 2)
         
-        # Label with ellipse info
+        # Label with ellipse info (clickable)
         label_text = f"{index + 1}. Ellipse at ({ellipse.center_x:.1f}, {ellipse.center_y:.1f})"
-        label = QLabel(label_text)
-        layout.addWidget(label, 1)
-        
-        # Edit button
-        btn_edit = QPushButton("Edit")
-        btn_edit.setMaximumWidth(60)
-        btn_edit.clicked.connect(lambda: self.edit_clicked.emit(self.index))
-        layout.addWidget(btn_edit)
+        self.label = QLabel(label_text)
+        self.label.setCursor(Qt.PointingHandCursor)
+        layout.addWidget(self.label, 1)
         
         # Delete button
         btn_delete = QPushButton("Delete")
         btn_delete.setMaximumWidth(60)
         btn_delete.clicked.connect(lambda: self.delete_clicked.emit(self.index))
         layout.addWidget(btn_delete)
+    
+    def mousePressEvent(self, event):
+        """Handle click on annotation item."""
+        self.clicked.emit(self.index)
 
 
 class Ellipse:
@@ -751,7 +751,7 @@ class CraterAnnotatorApp(QMainWindow):
         for i, ellipse in enumerate(self.canvas.ellipses):
             # Create custom item widget
             item_widget = AnnotationListItem(i, ellipse)
-            item_widget.edit_clicked.connect(self.on_annotation_edit)
+            item_widget.clicked.connect(self.on_annotation_edit)
             item_widget.delete_clicked.connect(self.on_annotation_delete)
             
             # Add to list
