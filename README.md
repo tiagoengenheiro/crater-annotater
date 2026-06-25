@@ -140,4 +140,4 @@ Potential features for future versions:
 
 ## License
 
-This tool is part of the Mars crater detection project.
+This tool is open-source

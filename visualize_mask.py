@@ -5,7 +5,7 @@ from torchvision.io import decode_image
 
 
 mask_example = decode_image(
-    os.path.join(os.path.dirname(__file__), "trial.png")
+    os.path.join(os.path.dirname(__file__), "example_mask.png")
 ).squeeze().numpy()
 fig = plt.figure(figsize=(10, 10))
 
