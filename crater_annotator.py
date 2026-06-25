@@ -293,7 +293,7 @@ class ImageCanvas(QLabel):
                 rx = abs(x2 - x1) / 2
                 ry = abs(y2 - y1) / 2
                 
-                if rx > 5 and ry > 5:  # Minimum size threshold
+                if rx > 1 and ry > 1:  # Minimum size threshold
                     cx = (x1 + x2) / 2
                     cy = (y1 + y2) / 2
                     
