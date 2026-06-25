@@ -1,0 +1,4 @@
+xc,yc,rx,ry,rotation,label
+100,150,30,25,0.0,small_crater
+300,200,60,55,0.0,medium_crater
+450,100,80,70,0.0,large_crater
