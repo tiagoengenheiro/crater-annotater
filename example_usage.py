@@ -9,6 +9,7 @@ import numpy as np
 from pathlib import Path
 from crater_annotator import Ellipse
 import pandas as pd
+from PIL import Image
 
 
 def create_sample_annotations():
@@ -33,66 +34,47 @@ def save_to_csv(craters, output_path):
 
 def create_mask_from_ellipses(craters, image_height, image_width, output_path):
     """
-    Create PyTorch mask from ellipse annotations.
-    
-    This matches the format used by the training pipeline:
-    - Shape: (N, H, W) where N is number of craters
-    - Values: Binary (0 or 1)
-    - Format: Sparse tensor saved as .pt file
+    Create a label PNG from ellipse annotations.
+
+    - Shape: (H, W)
+    - Values: 0 = background, 1 = crater 1, 2 = crater 2, ...
+    - Format: single-channel PNG
     """
-    sparse_masks = []
-    
-    for crater in craters:
-        # Create dense mask for this crater
-        mask_dense = torch.zeros((image_height, image_width), dtype=torch.uint8)
-        
-        # Create coordinate grids
-        y_coords, x_coords = torch.meshgrid(
-            torch.arange(image_height), 
-            torch.arange(image_width), 
-            indexing='ij'
-        )
-        
-        # Compute ellipse equation
+    mask = np.zeros((image_height, image_width), dtype=np.uint8)
+
+    y_coords, x_coords = np.meshgrid(
+        np.arange(image_height), np.arange(image_width), indexing='ij'
+    )
+
+    for i, crater in enumerate(craters, start=1):
         ellipse_eq = (
             ((x_coords - crater.center_x) ** 2 / (crater.radius_x ** 2)) +
             ((y_coords - crater.center_y) ** 2 / (crater.radius_y ** 2))
         )
-        
-        # Set pixels inside ellipse to 1
-        mask_dense[ellipse_eq <= 1] = 1
-        
-        # Convert to sparse
-        sparse_masks.append(mask_dense.to_sparse())
-    
-    # Stack all masks
-    dense_stacked = torch.stack([m.to_dense() for m in sparse_masks], dim=0)
-    mask = dense_stacked.to_sparse()
-    
-    # Save
-    torch.save(mask, output_path)
-    print(f"✓ Saved mask with shape {dense_stacked.shape} to {output_path}")
-    
+        mask[ellipse_eq <= 1] = i
+
+    Image.fromarray(mask, mode='L').save(output_path)
+    print(f"✓ Saved mask with shape {mask.shape} to {output_path} ({len(craters)} craters)")
+
     return mask
 
 
 def load_and_verify_mask(mask_path):
     """Load and verify a mask file."""
-    sparse_mask = torch.load(mask_path)
-    masks = sparse_mask.to_dense().to(torch.uint8)
-    
+    mask = np.array(Image.open(mask_path))
+    print(mask.shape)
     print(f"\nMask verification:")
-    print(f"  Shape: {masks.shape}")
-    print(f"  Number of craters: {masks.shape[0]}")
-    print(f"  Image dimensions: {masks.shape[1]} x {masks.shape[2]}")
-    print(f"  Data type: {masks.dtype}")
+    print(f"  Shape: {mask.shape}")
+    print(f"  Number of craters: {len(np.unique(mask[mask > 0]))}")
+    print(f"  Image dimensions: {mask.shape[0]} x {mask.shape[1]}")
+    print(f"  Data type: {mask.dtype}")
     
     # Calculate crater areas
-    for i in range(masks.shape[0]):
-        area = masks[i].sum().item()
-        print(f"  Crater {i+1} area: {area} pixels")
+    for i in range(1, len(np.unique(mask[mask > 0])) + 1):
+        area = (mask == i).sum().item()
+        print(f"  Crater {i} area: {area} pixels")
     
-    return masks
+    return mask
 
 
 def main():
@@ -114,7 +96,7 @@ def main():
     # Create and save mask
     print("\n3. Creating PyTorch mask...")
     image_height, image_width = 512, 512  # Example image dimensions
-    mask_path = "example_mask.pt"
+    mask_path = "example_mask.png"
     mask = create_mask_from_ellipses(craters, image_height, image_width, mask_path)
     
     # Verify the mask

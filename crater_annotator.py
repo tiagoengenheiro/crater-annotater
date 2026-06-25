@@ -25,6 +25,9 @@ from PyQt5.QtGui import (
     QKeySequence, QCursor
 )
 
+import numpy as np
+from PIL import Image
+
 
 class Ellipse:
     """Represents an annotated crater ellipse."""
@@ -333,44 +336,28 @@ class ImageCanvas(QLabel):
         df.to_csv(output_path, index=False)
         return True
     
+
     def export_to_mask(self, output_path: str) -> bool:
-        """Export ellipses to PyTorch mask format (compatible with training pipeline)."""
+        """Export ellipses to a label PNG (0=background, 1=crater 1, 2=crater 2, ...)."""
         if not self.ellipses or self.original_image is None:
             return False
-        
+
         H = self.original_image.height()
         W = self.original_image.width()
-        
-        # Create individual masks for each crater
-        sparse_masks = []
-        
-        for ellipse in self.ellipses:
-            # Create dense mask for this crater
-            mask_dense = torch.zeros((H, W), dtype=torch.uint8)
-            
-            # Create coordinate grids
-            y_coords, x_coords = torch.meshgrid(
-                torch.arange(H), torch.arange(W), indexing='ij'
-            )
-            
-            # Compute ellipse equation
+
+        # Single-channel label map
+        mask = np.zeros((H, W), dtype=np.uint8)
+
+        y_coords, x_coords = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
+
+        for i, ellipse in enumerate(self.ellipses, start=1):
             ellipse_eq = (
                 ((x_coords - ellipse.center_x) ** 2 / (ellipse.radius_x ** 2)) +
                 ((y_coords - ellipse.center_y) ** 2 / (ellipse.radius_y ** 2))
             )
-            
-            # Set pixels inside ellipse to 1
-            mask_dense[ellipse_eq <= 1] = 1
-            
-            # Convert to sparse and append
-            sparse_masks.append(mask_dense.to_sparse())
-        
-        # Stack all masks and convert to sparse
-        dense_stacked = torch.stack([m.to_dense() for m in sparse_masks], dim=0)
-        mask = dense_stacked.to_sparse()
-        
-        # Save mask
-        torch.save(mask, output_path)
+            mask[ellipse_eq <= 1] = i
+
+        Image.fromarray(mask, mode='L').save(output_path)
         return True
     
     def load_annotations(self, annotation_path: str) -> bool:
@@ -471,7 +458,7 @@ class CraterAnnotatorApp(QMainWindow):
         btn_save_annotations.clicked.connect(self.save_annotations_csv)
         file_layout.addWidget(btn_save_annotations)
         
-        btn_export_mask = QPushButton("Export as Mask (.pt)")
+        btn_export_mask = QPushButton("Export as Mask (.png)")
         btn_export_mask.clicked.connect(self.export_mask)
         file_layout.addWidget(btn_export_mask)
         
@@ -624,12 +611,12 @@ class CraterAnnotatorApp(QMainWindow):
             self,
             "Export Mask",
             "",
-            "PyTorch Tensor Files (*.pt);;All Files (*)"
+            "PNG Files (*.png);;All Files (*)"
         )
         
         if file_path:
-            if not file_path.endswith('.pt'):
-                file_path += '.pt'
+            if not file_path.endswith('.png'):
+                file_path += '.png'
             
             if self.canvas.export_to_mask(file_path):
                 QMessageBox.information(

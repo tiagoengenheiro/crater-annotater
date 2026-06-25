@@ -9,7 +9,7 @@ A desktop application for annotating craters on Mars images using ellipses. This
 - **Precise Adjustments**: Fine-tune ellipse parameters using numerical input boxes
 - **Multiple Export Formats**:
   - CSV files with ellipse parameters (xc, yc, rx, ry)
-  - PyTorch tensor masks (.pt) compatible with training pipelines
+  - PyTorch tensor masks (.png) compatible with training pipelines
 - **Import Existing Annotations**: Load previously saved CSV or JSON annotations
 - **Real-time Preview**: See annotations overlaid on the image as you work
 
@@ -58,7 +58,7 @@ python crater_annotator.py
 
 4. **Save Your Work**:
    - **Save Annotations (CSV)**: Export ellipse parameters to CSV format
-   - **Export as Mask (.pt)**: Create PyTorch tensor masks for training
+   - **Export as Mask (.png)**: Create PNG masks for training
 
 ### Keyboard Shortcuts
 
@@ -90,26 +90,12 @@ Saves ellipse parameters in a CSV file with columns:
 - `rotation`: Rotation angle (currently always 0)
 - `label`: Annotation label (default: "crater")
 
-### 2. PyTorch Mask Format (.pt)
+### 2. PNG Mask Format
 
-Creates a sparse tensor with shape `(N, H, W)` where:
-- `N`: Number of craters
-- `H`: Image height
-- `W`: Image width
+- 0 represents the background
+- 1 represents pixels from crater 1, 2 from crater 2, etc... N represents pixels from crater N.
 
-Each mask layer contains binary values (0 or 1) indicating the crater region. This format is compatible with the existing training pipeline that expects masks in the same format.
-
-**Loading the mask in your code:**
-```python
-import torch
-
-# Load mask
-sparse_mask = torch.load("path/to/mask.pt")
-masks = sparse_mask.to_dense().to(torch.uint8)  # Shape: (N, H, W)
-
-# Convert to single binary mask
-binary_mask = (masks.sum(dim=0) > 0).float()  # Shape: (H, W)
-```
+Number of craters: Calculate the max of the image array
 
 ## File Structure
 
@@ -120,21 +106,6 @@ crater-annotater/
 ├── README.md              # This file
 └── .venv/                 # Virtual environment
 ```
-
-## Integration with Training Pipeline
-
-The exported masks are fully compatible with your existing training code:
-
-1. **Export annotations** using "Export as Mask (.pt)"
-2. **Save to your dataset directory** following the pattern:
-   ```
-   dataset/{definition}-definition-{size}/masks/lat_{lat}_long_{long}_mask.pt
-   ```
-3. **Load in training scripts** using the standard pattern:
-   ```python
-   sparse_mask = torch.load(mask_path)
-   masks = sparse_mask.to_dense().to(torch.uint8)
-   ```
 
 ## Tips
 
