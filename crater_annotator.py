@@ -15,11 +15,11 @@ import pandas as pd
 import torch
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QListWidget, QMessageBox,
+    QPushButton, QLabel, QFileDialog, QListWidget, QListWidgetItem, QMessageBox,
     QInputDialog, QSlider, QSpinBox, QDoubleSpinBox, QGroupBox,
     QFormLayout, QCheckBox, QSplitter
 )
-from PyQt5.QtCore import Qt, QPoint, QRect, QRectF, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, QRect, QRectF, pyqtSignal, QSize
 from PyQt5.QtGui import (
     QPixmap, QPainter, QPen, QColor, QImage, QBrush,
     QKeySequence, QCursor
@@ -27,6 +27,38 @@ from PyQt5.QtGui import (
 
 import numpy as np
 from PIL import Image
+
+
+class AnnotationListItem(QWidget):
+    """Custom widget for displaying annotation in list with Edit/Delete buttons."""
+    
+    edit_clicked = pyqtSignal(int)  # index
+    delete_clicked = pyqtSignal(int)  # index
+    
+    def __init__(self, index: int, ellipse: 'Ellipse', parent=None):
+        super().__init__(parent)
+        self.index = index
+        self.ellipse = ellipse
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 2, 5, 2)
+        
+        # Label with ellipse info
+        label_text = f"{index + 1}. Ellipse at ({ellipse.center_x:.1f}, {ellipse.center_y:.1f})"
+        label = QLabel(label_text)
+        layout.addWidget(label, 1)
+        
+        # Edit button
+        btn_edit = QPushButton("Edit")
+        btn_edit.setMaximumWidth(60)
+        btn_edit.clicked.connect(lambda: self.edit_clicked.emit(self.index))
+        layout.addWidget(btn_edit)
+        
+        # Delete button
+        btn_delete = QPushButton("Delete")
+        btn_delete.setMaximumWidth(60)
+        btn_delete.clicked.connect(lambda: self.delete_clicked.emit(self.index))
+        layout.addWidget(btn_delete)
 
 
 class Ellipse:
@@ -539,6 +571,16 @@ class CraterAnnotatorApp(QMainWindow):
         action_group.setLayout(action_layout)
         layout.addWidget(action_group)
         
+        # Annotations list group
+        annot_group = QGroupBox("Annotations")
+        annot_layout = QVBoxLayout()
+        
+        self.list_annotations = QListWidget()
+        annot_layout.addWidget(self.list_annotations)
+        
+        annot_group.setLayout(annot_layout)
+        layout.addWidget(annot_group)
+        
         # Add stretch to push everything to the top
         layout.addStretch()
         
@@ -654,12 +696,18 @@ class CraterAnnotatorApp(QMainWindow):
     def on_ellipse_modified(self, ellipse: Ellipse):
         """Handle ellipse modification."""
         self.update_ellipse_properties()
+        self.update_annotation_list()
     
     def on_ellipse_selected(self, ellipse: Optional[Ellipse]):
         """Handle ellipse selection change."""
         if ellipse:
             self.props_group.setEnabled(True)
             self.update_ellipse_properties()
+            # Update list selection
+            for i, e in enumerate(self.canvas.ellipses):
+                if e == ellipse:
+                    self.list_annotations.setCurrentRow(i)
+                    break
         else:
             self.props_group.setEnabled(False)
     
@@ -694,6 +742,40 @@ class CraterAnnotatorApp(QMainWindow):
     def update_statistics(self):
         """Update statistics display."""
         self.lbl_count.setText(f"Ellipses: {len(self.canvas.ellipses)}")
+        self.update_annotation_list()
+    
+    def update_annotation_list(self):
+        """Refresh the annotation list."""
+        self.list_annotations.clear()
+        
+        for i, ellipse in enumerate(self.canvas.ellipses):
+            # Create custom item widget
+            item_widget = AnnotationListItem(i, ellipse)
+            item_widget.edit_clicked.connect(self.on_annotation_edit)
+            item_widget.delete_clicked.connect(self.on_annotation_delete)
+            
+            # Add to list
+            list_item = QListWidgetItem(self.list_annotations)
+            list_item.setSizeHint(item_widget.sizeHint())
+            self.list_annotations.addItem(list_item)
+            self.list_annotations.setItemWidget(list_item, item_widget)
+    
+    def on_annotation_edit(self, index: int):
+        """Handle edit button click for annotation."""
+        if 0 <= index < len(self.canvas.ellipses):
+            ellipse = self.canvas.ellipses[index]
+            self.canvas.select_ellipse(ellipse)
+    
+    def on_annotation_delete(self, index: int):
+        """Handle delete button click for annotation."""
+        if 0 <= index < len(self.canvas.ellipses):
+            ellipse = self.canvas.ellipses[index]
+            self.canvas.ellipses.remove(ellipse)
+            if self.canvas.selected_ellipse == ellipse:
+                self.canvas.selected_ellipse = None
+                self.canvas.ellipse_selected.emit(None)
+            self.canvas.update_display()
+            self.update_statistics()
 
 
 def main():
