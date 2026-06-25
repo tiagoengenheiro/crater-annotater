@@ -696,7 +696,6 @@ class CraterAnnotatorApp(QMainWindow):
     def on_ellipse_modified(self, ellipse: Ellipse):
         """Handle ellipse modification."""
         self.update_ellipse_properties()
-        self.update_annotation_list()
     
     def on_ellipse_selected(self, ellipse: Optional[Ellipse]):
         """Handle ellipse selection change."""
