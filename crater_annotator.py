@@ -25,7 +25,6 @@ from PyQt5.QtGui import (
     QKeySequence, QCursor
 )
 
-import numpy as np
 from PIL import Image
 
 
@@ -124,6 +123,7 @@ class ImageCanvas(QLabel):
         super().__init__(parent)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         
         # Image data
         self.original_image: Optional[QPixmap] = None
@@ -368,7 +368,6 @@ class ImageCanvas(QLabel):
         df.to_csv(output_path, index=False)
         return True
     
-
     def export_to_mask(self, output_path: str) -> bool:
         """Export ellipses to a label PNG (0=background, 1=crater 1, 2=crater 2, ...)."""
         if not self.ellipses or self.original_image is None:
@@ -789,4 +788,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    retryFlag = os.environ.get("APP_RETRY_STATE")
+    if retryFlag != "1":
+        import subprocess
+        currentEnv = os.environ.copy()
+        currentEnv["APP_RETRY_STATE"] = "1"
+        currentEnv["QT_QPA_PLATFORM"] = "xcb"
+        exitCode = subprocess.run([sys.executable] + sys.argv, env=currentEnv).returncode
+        if exitCode != 0:
+            currentEnv["QT_QPA_PLATFORM"] = "wayland"
+            subprocess.run([sys.executable] + sys.argv, env=currentEnv)
+        sys.exit(0)
+    else:
+        main()
