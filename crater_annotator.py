@@ -731,10 +731,14 @@ class CraterAnnotatorApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "No ellipses to save.")
             return
         
+        defaultName = ""
+        if self.current_image_path:
+            defaultName = Path(self.current_image_path).with_suffix('.csv').name
+            
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Annotations",
-            "",
+            defaultName,
             "CSV Files (*.csv);;All Files (*)"
         )
         
@@ -754,10 +758,14 @@ class CraterAnnotatorApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "No ellipses to export.")
             return
         
+        defaultName = ""
+        if self.current_image_path:
+            defaultName = Path(self.current_image_path).with_suffix('.png').name
+            
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Mask",
-            "",
+            defaultName,
             "PNG Files (*.png);;All Files (*)"
         )
         
