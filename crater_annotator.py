@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QListWidget, QListWidgetItem, QMessageBox,
     QInputDialog, QSlider, QSpinBox, QDoubleSpinBox, QGroupBox,
-    QFormLayout, QCheckBox, QSplitter
+    QFormLayout, QCheckBox, QSplitter, QScrollArea
 )
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF, pyqtSignal, QSize
 from PyQt5.QtGui import (
@@ -25,9 +25,15 @@ from PyQt5.QtGui import (
     QKeySequence, QCursor
 )
 
-import numpy as np
 from PIL import Image
+from skimage.io import imread
+from skimage.measure import label, regionprops
 
+wslDistro = os.environ.get("WSL_DISTRO_NAME")
+if wslDistro is not None:
+    if os.environ.get("QT_QPA_PLATFORM") != "wayland":
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+    os.environ["LIBGL_ALWAYS_INDIRECT"] = "1"
 
 class AnnotationListItem(QWidget):
     """Custom widget for displaying annotation in list with Delete button."""
@@ -124,10 +130,10 @@ class ImageCanvas(QLabel):
         super().__init__(parent)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
+        self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         
         # Image data
         self.original_image: Optional[QPixmap] = None
-        self.display_pixmap: Optional[QPixmap] = None
         self.image_path: Optional[str] = None
         
         # Ellipse storage
@@ -142,6 +148,7 @@ class ImageCanvas(QLabel):
         # Editing state
         self.dragging_ellipse: Optional[Ellipse] = None
         self.resizing_ellipse: Optional[Ellipse] = None
+        self.resizeAxis: Optional[str] = None
         self.drag_offset: Optional[QPoint] = None
         
         # Display settings
@@ -149,6 +156,7 @@ class ImageCanvas(QLabel):
         self.ellipse_color = QColor(0, 255, 0, 180)
         self.selected_color = QColor(255, 255, 0, 200)
         self.drawing_color = QColor(255, 0, 0, 150)
+        self.scaleFactor = 1.0
     
     def load_image(self, image_path: str) -> bool:
         """Load an image file."""
@@ -160,6 +168,7 @@ class ImageCanvas(QLabel):
         self.image_path = image_path
         self.ellipses.clear()
         self.selected_ellipse = None
+        self.scaleFactor = 1.0
         self.update_display()
         return True
     
@@ -168,17 +177,29 @@ class ImageCanvas(QLabel):
         if self.original_image is None:
             return
         
-        # Create a copy of the image to draw on
-        self.display_pixmap = self.original_image.copy()
+        self.setFixedSize(
+            int(self.original_image.width() * self.scaleFactor),
+            int(self.original_image.height() * self.scaleFactor)
+        )
+        self.update()
+
+    def paintEvent(self, event):
+        """Handle paint events to render natively without lagging."""
+        if self.original_image is None:
+            super().paintEvent(event)
+            return
+            
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.scale(self.scaleFactor, self.scaleFactor)
+        
+        painter.drawPixmap(0, 0, self.original_image)
         
         if self.show_ellipses:
-            painter = QPainter(self.display_pixmap)
-            painter.setRenderHint(QPainter.Antialiasing)
-            
-            # Draw all ellipses
             for ellipse in self.ellipses:
                 color = self.selected_color if ellipse.selected else self.ellipse_color
                 pen = QPen(color, 2)
+                pen.setCosmetic(True)
                 painter.setPen(pen)
                 painter.setBrush(QBrush(QColor(color.red(), color.green(), color.blue(), 30)))
                 
@@ -199,6 +220,7 @@ class ImageCanvas(QLabel):
             # Draw current drawing ellipse
             if self.drawing_mode and self.drawing_start and self.drawing_current:
                 pen = QPen(self.drawing_color, 2, Qt.DashLine)
+                pen.setCosmetic(True)
                 painter.setPen(pen)
                 
                 x1, y1 = self.drawing_start.x(), self.drawing_start.y()
@@ -210,46 +232,58 @@ class ImageCanvas(QLabel):
                 cy = (y1 + y2) / 2
                 
                 painter.drawEllipse(QRectF(cx - rx, cy - ry, 2 * rx, 2 * ry))
-            
-            painter.end()
         
-        self.setPixmap(self.display_pixmap)
+        painter.end()
     
     def mousePressEvent(self, event):
         """Handle mouse press events."""
         if self.original_image is None:
             return
         
-        pos = event.pos()
+        mappedPos = QPoint(int(event.pos().x() / self.scaleFactor), int(event.pos().y() / self.scaleFactor))
         
         if event.button() == Qt.LeftButton:
+            if event.modifiers() & Qt.ShiftModifier:
+                clicked_ellipse = None
+                for ellipse in reversed(self.ellipses):
+                    if ellipse.contains_point(mappedPos.x(), mappedPos.y(), tolerance=10.0 / self.scaleFactor):
+                        clicked_ellipse = ellipse
+                        break
+                if clicked_ellipse:
+                    self.select_ellipse(clicked_ellipse)
+                    self.resizing_ellipse = clicked_ellipse
+                    dx = abs(mappedPos.x() - clicked_ellipse.center_x) / max(clicked_ellipse.radius_x, 1)
+                    dy = abs(mappedPos.y() - clicked_ellipse.center_y) / max(clicked_ellipse.radius_y, 1)
+                    self.resizeAxis = 'x' if dx > dy else 'y'
+                return
+
             # Check if clicking on an existing ellipse
-            clicked_ellipse = self.get_ellipse_at(pos.x(), pos.y())
+            clicked_ellipse = self.get_ellipse_at(mappedPos.x(), mappedPos.y())
             
             if event.modifiers() & Qt.ControlModifier:
                 # Ctrl+Click: Start drawing new ellipse
                 self.drawing_mode = True
-                self.drawing_start = pos
-                self.drawing_current = pos
+                self.drawing_start = mappedPos
+                self.drawing_current = mappedPos
                 self.deselect_all()
             elif clicked_ellipse:
                 # Click on ellipse: Select and prepare to drag
                 self.select_ellipse(clicked_ellipse)
                 self.dragging_ellipse = clicked_ellipse
                 self.drag_offset = QPoint(
-                    pos.x() - int(clicked_ellipse.center_x),
-                    pos.y() - int(clicked_ellipse.center_y)
+                    mappedPos.x() - int(clicked_ellipse.center_x),
+                    mappedPos.y() - int(clicked_ellipse.center_y)
                 )
             else:
                 # Click on empty space: Start drawing
                 self.drawing_mode = True
-                self.drawing_start = pos
-                self.drawing_current = pos
+                self.drawing_start = mappedPos
+                self.drawing_current = mappedPos
                 self.deselect_all()
         
         elif event.button() == Qt.RightButton:
             # Right click: Delete ellipse
-            clicked_ellipse = self.get_ellipse_at(pos.x(), pos.y())
+            clicked_ellipse = self.get_ellipse_at(mappedPos.x(), mappedPos.y())
             if clicked_ellipse:
                 self.ellipses.remove(clicked_ellipse)
                 if self.selected_ellipse == clicked_ellipse:
@@ -262,23 +296,31 @@ class ImageCanvas(QLabel):
         if self.original_image is None:
             return
         
-        pos = event.pos()
+        mappedPos = QPoint(int(event.pos().x() / self.scaleFactor), int(event.pos().y() / self.scaleFactor))
         
         # Update cursor based on position
-        if self.get_ellipse_at(pos.x(), pos.y()):
+        if self.get_ellipse_at(mappedPos.x(), mappedPos.y()):
             self.setCursor(QCursor(Qt.PointingHandCursor))
         else:
             self.setCursor(QCursor(Qt.CrossCursor))
         
         if self.drawing_mode and self.drawing_start:
             # Update drawing preview
-            self.drawing_current = pos
+            self.drawing_current = mappedPos
             self.update_display()
         
+        elif self.resizing_ellipse:
+            if self.resizeAxis == 'x':
+                self.resizing_ellipse.radius_x = max(1.0, abs(mappedPos.x() - self.resizing_ellipse.center_x))
+            else:
+                self.resizing_ellipse.radius_y = max(1.0, abs(mappedPos.y() - self.resizing_ellipse.center_y))
+            self.update_display()
+            self.ellipse_modified.emit(self.resizing_ellipse)
+
         elif self.dragging_ellipse and self.drag_offset:
             # Drag ellipse to new position
-            self.dragging_ellipse.center_x = pos.x() - self.drag_offset.x()
-            self.dragging_ellipse.center_y = pos.y() - self.drag_offset.y()
+            self.dragging_ellipse.center_x = mappedPos.x() - self.drag_offset.x()
+            self.dragging_ellipse.center_y = mappedPos.y() - self.drag_offset.y()
             self.update_display()
             self.ellipse_modified.emit(self.dragging_ellipse)
     
@@ -309,6 +351,9 @@ class ImageCanvas(QLabel):
             elif self.dragging_ellipse:
                 self.dragging_ellipse = None
                 self.drag_offset = None
+
+            elif self.resizing_ellipse:
+                self.resizing_ellipse = None
     
     def keyPressEvent(self, event):
         """Handle keyboard events."""
@@ -326,7 +371,17 @@ class ImageCanvas(QLabel):
                 self.drawing_start = None
                 self.drawing_current = None
                 self.update_display()
-    
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            degrees = event.angleDelta().y() / 8
+            steps = degrees / 15
+            if steps > 0:
+                self.scaleFactor *= 1.2
+            else:
+                self.scaleFactor /= 1.2
+            self.update_display()
+
     def get_ellipse_at(self, x: float, y: float) -> Optional[Ellipse]:
         """Find ellipse at given coordinates."""
         # Check in reverse order (top to bottom)
@@ -368,7 +423,6 @@ class ImageCanvas(QLabel):
         df.to_csv(output_path, index=False)
         return True
     
-
     def export_to_mask(self, output_path: str) -> bool:
         """Export ellipses to a label PNG (0=background, 1=crater 1, 2=crater 2, ...)."""
         if not self.ellipses or self.original_image is None:
@@ -457,7 +511,11 @@ class CraterAnnotatorApp(QMainWindow):
         self.canvas.ellipse_added.connect(self.on_ellipse_added)
         self.canvas.ellipse_modified.connect(self.on_ellipse_modified)
         self.canvas.ellipse_selected.connect(self.on_ellipse_selected)
-        splitter.addWidget(self.canvas)
+        
+        self.scrollArea = QScrollArea()
+        self.scrollArea.setWidget(self.canvas)
+        self.scrollArea.setWidgetResizable(True)
+        splitter.addWidget(self.scrollArea)
         
         # Right panel: Controls
         control_panel = self.create_control_panel()
@@ -486,6 +544,10 @@ class CraterAnnotatorApp(QMainWindow):
         btn_load_annotations.clicked.connect(self.load_annotations)
         file_layout.addWidget(btn_load_annotations)
         
+        btnLoadGtMask = QPushButton("Load GT Mask")
+        btnLoadGtMask.clicked.connect(self.loadGtMask)
+        file_layout.addWidget(btnLoadGtMask)
+        
         btn_save_annotations = QPushButton("Save Annotations (CSV)")
         btn_save_annotations.clicked.connect(self.save_annotations_csv)
         file_layout.addWidget(btn_save_annotations)
@@ -507,9 +569,11 @@ class CraterAnnotatorApp(QMainWindow):
             "• Ctrl+Click & Drag: Force new ellipse<br>"
             "• Click on ellipse: Select<br>"
             "• Drag ellipse: Move<br>"
+            "• Shift+Click edge: Resize ellipse<br>"
             "• Right-click: Delete ellipse<br>"
             "• Delete key: Remove selected<br>"
-            "• Esc: Cancel drawing"
+            "• Esc: Cancel drawing<br>"
+            "• Ctrl+Mouse Wheel: Zoom in/out"
         )
         instructions.setWordWrap(True)
         instructions.setAlignment(Qt.AlignLeft)
@@ -567,6 +631,10 @@ class CraterAnnotatorApp(QMainWindow):
         btn_clear = QPushButton("Clear All Ellipses")
         btn_clear.clicked.connect(self.clear_all)
         action_layout.addWidget(btn_clear)
+
+        btnFullscreen = QPushButton("Toggle Fullscreen")
+        btnFullscreen.clicked.connect(self.toggleFullscreen)
+        action_layout.addWidget(btnFullscreen)
         
         action_group.setLayout(action_layout)
         layout.addWidget(action_group)
@@ -619,6 +687,43 @@ class CraterAnnotatorApp(QMainWindow):
                 QMessageBox.information(self, "Success", f"Loaded {len(self.canvas.ellipses)} annotations.")
             else:
                 QMessageBox.warning(self, "Error", "Failed to load annotations.")
+
+    def loadGtMask(self):
+        """Load a ground truth mask and convert blobs to ellipses."""
+        filePath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open GT Mask",
+            "",
+            "Image Files (*.png *.jpg *.jpeg *.tif *.tiff);;All Files (*)"
+        )
+        
+        if filePath:
+            try:
+                maskData = imread(filePath)
+                if maskData.ndim == 3:
+                    maskData = maskData[:, :, 0]
+                
+                labeledMask = label(maskData > 0)
+                regions = regionprops(labeledMask)
+                
+                count = 0
+                for props in regions:
+                    minr, minc, maxr, maxc = props.bbox
+                    rx = (maxc - minc) / 2
+                    ry = (maxr - minr) / 2
+                    cx = (maxc + minc) / 2
+                    cy = (maxr + minr) / 2
+                    
+                    if rx > 1 and ry > 1:
+                        newEllipse = Ellipse(cx, cy, rx, ry)
+                        self.canvas.ellipses.append(newEllipse)
+                        count += 1
+                
+                self.canvas.update_display()
+                self.update_statistics()
+                QMessageBox.information(self, "Success", f"Loaded {count} annotations from GT Mask.")
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to load GT mask:\n{str(e)}")
     
     def save_annotations_csv(self):
         """Save annotations to CSV file."""
@@ -626,10 +731,14 @@ class CraterAnnotatorApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "No ellipses to save.")
             return
         
+        defaultName = ""
+        if self.current_image_path:
+            defaultName = Path(self.current_image_path).with_suffix('.csv').name
+            
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Annotations",
-            "",
+            defaultName,
             "CSV Files (*.csv);;All Files (*)"
         )
         
@@ -649,10 +758,14 @@ class CraterAnnotatorApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "No ellipses to export.")
             return
         
+        defaultName = ""
+        if self.current_image_path:
+            defaultName = Path(self.current_image_path).with_suffix('.png').name
+            
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Mask",
-            "",
+            defaultName,
             "PNG Files (*.png);;All Files (*)"
         )
         
@@ -688,6 +801,12 @@ class CraterAnnotatorApp(QMainWindow):
         if reply == QMessageBox.Yes:
             self.canvas.clear_ellipses()
             self.update_statistics()
+
+    def toggleFullscreen(self):
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
     
     def on_ellipse_added(self, ellipse: Ellipse):
         """Handle new ellipse addition."""
@@ -789,4 +908,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    retryFlag = os.environ.get("APP_RETRY_STATE")
+    if retryFlag != "1":
+        import subprocess
+        currentEnv = os.environ.copy()
+        currentEnv["APP_RETRY_STATE"] = "1"
+        currentEnv["QT_QPA_PLATFORM"] = "xcb"
+        exitCode = subprocess.run([sys.executable] + sys.argv, env=currentEnv).returncode
+        if exitCode != 0:
+            currentEnv["QT_QPA_PLATFORM"] = "wayland"
+            subprocess.run([sys.executable] + sys.argv, env=currentEnv)
+        sys.exit(0)
+    else:
+        main()
