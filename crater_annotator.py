@@ -12,14 +12,13 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import torch
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QListWidget, QListWidgetItem, QMessageBox,
     QInputDialog, QSlider, QSpinBox, QDoubleSpinBox, QGroupBox,
     QFormLayout, QCheckBox, QSplitter, QScrollArea
 )
-from PyQt5.QtCore import Qt, QPoint, QRect, QRectF, pyqtSignal, QSize
+from PyQt5.QtCore import Qt, QPoint, QRect, QRectF, pyqtSignal, QSize,QSettings
 from PyQt5.QtGui import (
     QPixmap, QPainter, QPen, QColor, QImage, QBrush,
     QKeySequence, QCursor
@@ -214,7 +213,7 @@ class ImageCanvas(QLabel):
                 
                 # Draw center point
                 painter.drawEllipse(QRectF(
-                    ellipse.center_x - 3, ellipse.center_y - 3, 6, 6
+                    ellipse.center_x - 0.5, ellipse.center_y - 0.5, 1, 1
                 ))
             
             # Draw current drawing ellipse
