@@ -26,6 +26,7 @@ from PyQt5.QtGui import (
 
 from PIL import Image
 from skimage.io import imread
+from skimage.measure import find_contours, EllipseModel
 from skimage.measure import label, regionprops
 
 wslDistro = os.environ.get("WSL_DISTRO_NAME")
@@ -689,6 +690,7 @@ class CraterAnnotatorApp(QMainWindow):
 
     def loadGtMask(self):
         """Load a ground truth mask and convert blobs to ellipses."""
+        #TODO: Find the best way to convert blobs to ellipses, taking into account image boundaries
         filePath, _ = QFileDialog.getOpenFileName(
             self,
             "Open GT Mask",
@@ -699,25 +701,29 @@ class CraterAnnotatorApp(QMainWindow):
         if filePath:
             try:
                 maskData = imread(filePath)
-                if maskData.ndim == 3:
-                    maskData = maskData[:, :, 0]
                 
-                labeledMask = label(maskData > 0)
-                regions = regionprops(labeledMask)
-                
+                labels = np.unique(maskData)
+                labels = labels[labels != 0]
+
                 count = 0
-                for props in regions:
-                    minr, minc, maxr, maxc = props.bbox
-                    rx = (maxc - minc) / 2
-                    ry = (maxr - minr) / 2
-                    cx = (maxc + minc) / 2
-                    cy = (maxr + minr) / 2
-                    
-                    if rx > 1 and ry > 1:
-                        newEllipse = Ellipse(cx, cy, rx, ry)
-                        self.canvas.ellipses.append(newEllipse)
+                for lbl in labels:
+                    binary = (maskData == lbl)
+                    contours = find_contours(binary, 0.5)
+                    if not contours:
+                        continue
+                    contour = max(contours, key=len)  # largest ring, in case of noise
+                    points = np.column_stack([contour[:, 1], contour[:, 0]])
+
+                    model = EllipseModel()
+                    if model.estimate(points):
+                        xc, yc, a, b, theta = model.params
+                        self.canvas.ellipses.append(Ellipse(
+                            center_x=xc, center_y=yc,
+                            radius_x=a, radius_y=b,
+                            rotation=np.degrees(theta)
+                        ))
                         count += 1
-                
+                        
                 self.canvas.update_display()
                 self.update_statistics()
                 QMessageBox.information(self, "Success", f"Loaded {count} annotations from GT Mask.")
