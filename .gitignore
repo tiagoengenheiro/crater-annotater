@@ -2,8 +2,6 @@
 __pycache__/
 *.pyc
 git_commit_protocol.txt
-example_*
-!example_usage.py
 build/
 dist/
 crater_annotator.spec
