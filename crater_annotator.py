@@ -737,7 +737,7 @@ class CraterAnnotatorApp(QMainWindow):
             return
 
         if self.apply_labels_for_key(image_key):
-            QMessageBox.information(self, "Success", f"Loaded {len(self.canvas.ellipses)} annotations from cached {self.labels_json_path}for '{image_key}'.")
+            QMessageBox.information(self, "Success", f"Loaded {len(self.canvas.ellipses)} annotations from cached {os.path.basename(self.labels_json_path)} for '{image_key}'.")
             return
 
     def load_labels_json(self):
