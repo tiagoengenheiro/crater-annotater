@@ -488,6 +488,8 @@ class CraterAnnotatorApp(QMainWindow):
         # Current state
         self.current_image_path: Optional[str] = None
         self.current_annotation_path: Optional[str] = None
+        self.labels_json_path: Optional[str] = None
+        self.labels_cache: Optional[dict] = None
     
     def init_ui(self):
         """Initialize the user interface."""
@@ -633,6 +635,12 @@ class CraterAnnotatorApp(QMainWindow):
         btnFullscreen.clicked.connect(self.toggleFullscreen)
         action_layout.addWidget(btnFullscreen)
         
+        btnRemoveCachedLabels = QPushButton("Remove Cached Labels (.json)")
+        btnRemoveCachedLabels.clicked.connect(self.remove_cached_labels)
+        action_layout.addWidget(btnRemoveCachedLabels)
+        
+
+
         action_group.setLayout(action_layout)
         layout.addWidget(action_group)
         
@@ -665,6 +673,7 @@ class CraterAnnotatorApp(QMainWindow):
                 self.current_image_path = file_path
                 self.setWindowTitle(f"Mars Crater Annotation Tool - {Path(file_path).name}")
                 self.update_statistics()
+                self.apply_cached_labels_for_current_image()
             else:
                 QMessageBox.warning(self, "Error", "Failed to load image.")
     
@@ -693,8 +702,46 @@ class CraterAnnotatorApp(QMainWindow):
         image_stem = Path(self.current_image_path).stem
         return image_stem.removesuffix("_original")
 
+    def apply_labels_for_key(self, image_key: str) -> bool:
+        """Populate the canvas from cached labels for a single image key."""
+        if not self.labels_cache or image_key not in self.labels_cache:
+            return False
+
+        image_labels = self.labels_cache[image_key]
+        self.canvas.clear_ellipses()
+
+        for ellipse_data in image_labels:
+            if len(ellipse_data) < 4:
+                continue
+
+            xc, yc, rx, ry = ellipse_data[:4]
+            self.canvas.ellipses.append(Ellipse(
+                center_x=xc,
+                center_y=yc,
+                radius_x=rx,
+                radius_y=ry,
+                rotation=0.0,
+                label="crater"
+            ))
+
+        self.canvas.selected_ellipse = None
+        self.canvas.ellipse_selected.emit(None)
+        self.canvas.update_display()
+        self.update_statistics()
+        return True
+
+    def apply_cached_labels_for_current_image(self):
+        """Apply cached labels to the currently loaded image if available."""
+        image_key = self.get_current_image_key()
+        if not image_key:
+            return
+
+        if self.apply_labels_for_key(image_key):
+            QMessageBox.information(self, "Success", f"Loaded {len(self.canvas.ellipses)} annotations from cached {self.labels_json_path}for '{image_key}'.")
+            return
+
     def load_labels_json(self):
-        """Load annotations from a labels.json file using the current image key."""
+        """Load annotations from a labels.json file and cache it in memory."""
         image_key = self.get_current_image_key()
         if not image_key:
             QMessageBox.warning(self, "Warning", "Load an image first, then load labels.json.")
@@ -712,9 +759,10 @@ class CraterAnnotatorApp(QMainWindow):
 
         try:
             with open(file_path, "r") as f:
-                labels = json.load(f)
+                self.labels_cache = json.load(f)
+                self.labels_json_path = file_path
 
-            if image_key not in labels:
+            if image_key not in self.labels_cache:
                 QMessageBox.warning(
                     self,
                     "Error",
@@ -722,31 +770,11 @@ class CraterAnnotatorApp(QMainWindow):
                 )
                 return
 
-            image_labels = labels[image_key]
-            self.canvas.ellipses.clear()
-
-            for ellipse_data in image_labels:
-                if len(ellipse_data) < 4:
-                    continue
-
-                xc, yc, rx, ry = ellipse_data[:4]
-                self.canvas.ellipses.append(Ellipse(
-                    center_x=xc,
-                    center_y=yc,
-                    radius_x=rx,
-                    radius_y=ry,
-                    rotation=0.0,
-                    label="crater"
-                ))
-
-            self.canvas.selected_ellipse = None
-            self.canvas.ellipse_selected.emit(None)
-            self.canvas.update_display()
-            self.update_statistics()
+            self.apply_labels_for_key(image_key)
             QMessageBox.information(
                 self,
                 "Success",
-                f"Loaded {len(self.canvas.ellipses)} annotations for '{image_key}'."
+                f"Loaded labels.json and applied {len(self.canvas.ellipses)} annotations for '{image_key}'."
             )
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load labels.json:\n{str(e)}")
@@ -876,6 +904,27 @@ class CraterAnnotatorApp(QMainWindow):
         else:
             self.showFullScreen()
     
+    def remove_cached_labels(self):
+        if not self.labels_json_path:
+            QMessageBox.information(self, "Info", "No cached labels to remove.")
+        else:
+            reply = QMessageBox.question(
+                self,
+                "Confirm Remove Cached Labels",
+                f"Are you sure you want to remove cached labels from '{os.path.basename(self.labels_json_path)}'?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                try:
+                    self.labels_cache = None
+                    self.labels_json_path = None
+                    QMessageBox.information(self, "Success", "Cached labels removed.")
+                except Exception as e:
+                    QMessageBox.warning(self, "Error", f"Failed to remove cached labels:\n{str(e)}")
+
+
     def on_ellipse_added(self, ellipse: Ellipse):
         """Handle new ellipse addition."""
         self.update_statistics()
