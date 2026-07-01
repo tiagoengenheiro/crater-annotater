@@ -536,6 +536,10 @@ class CraterAnnotatorApp(QMainWindow):
         btn_load_annotations = QPushButton("Load Annotations (.csv)")
         btn_load_annotations.clicked.connect(self.load_annotations)
         file_layout.addWidget(btn_load_annotations)
+
+        btn_load_labels = QPushButton("Load Annotations from labels.json")
+        btn_load_labels.clicked.connect(self.load_labels_json)
+        file_layout.addWidget(btn_load_labels)
         
         btnLoadGtMask = QPushButton("Load GT Mask (Fails for some craters)")
         btnLoadGtMask.clicked.connect(self.loadGtMask)
@@ -680,6 +684,72 @@ class CraterAnnotatorApp(QMainWindow):
                 QMessageBox.information(self, "Success", f"Loaded {len(self.canvas.ellipses)} annotations.")
             else:
                 QMessageBox.warning(self, "Error", "Failed to load annotations.")
+
+    def get_current_image_key(self) -> Optional[str]:
+        """Derive the labels.json lookup key from the loaded image name."""
+        if not self.current_image_path:
+            return None
+
+        image_stem = Path(self.current_image_path).stem
+        return image_stem.removesuffix("_original")
+
+    def load_labels_json(self):
+        """Load annotations from a labels.json file using the current image key."""
+        image_key = self.get_current_image_key()
+        if not image_key:
+            QMessageBox.warning(self, "Warning", "Load an image first, then load labels.json.")
+            return
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Labels JSON",
+            "",
+            "JSON Files (*.json);;All Files (*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "r") as f:
+                labels = json.load(f)
+
+            if image_key not in labels:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"No annotations found for key '{image_key}'."
+                )
+                return
+
+            image_labels = labels[image_key]
+            self.canvas.ellipses.clear()
+
+            for ellipse_data in image_labels:
+                if len(ellipse_data) < 4:
+                    continue
+
+                xc, yc, rx, ry = ellipse_data[:4]
+                self.canvas.ellipses.append(Ellipse(
+                    center_x=xc,
+                    center_y=yc,
+                    radius_x=rx,
+                    radius_y=ry,
+                    rotation=0.0,
+                    label="crater"
+                ))
+
+            self.canvas.selected_ellipse = None
+            self.canvas.ellipse_selected.emit(None)
+            self.canvas.update_display()
+            self.update_statistics()
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Loaded {len(self.canvas.ellipses)} annotations for '{image_key}'."
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to load labels.json:\n{str(e)}")
 
     def loadGtMask(self):
         """Load a ground truth mask and convert blobs to ellipses."""
