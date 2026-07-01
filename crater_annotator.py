@@ -467,13 +467,6 @@ class ImageCanvas(QLabel):
                 self.update_display()
                 return True
             
-            elif annotation_path.endswith('.json'):
-                with open(annotation_path, 'r') as f:
-                    data = json.load(f)
-                    self.ellipses = [Ellipse.from_dict(e) for e in data]
-                    self.update_display()
-                    return True
-            
         except Exception as e:
             print(f"Error loading annotations: {e}")
             return False
@@ -540,15 +533,15 @@ class CraterAnnotatorApp(QMainWindow):
         btn_load_image.clicked.connect(self.load_image)
         file_layout.addWidget(btn_load_image)
         
-        btn_load_annotations = QPushButton("Load Annotations")
+        btn_load_annotations = QPushButton("Load Annotations (.csv)")
         btn_load_annotations.clicked.connect(self.load_annotations)
         file_layout.addWidget(btn_load_annotations)
         
-        btnLoadGtMask = QPushButton("Load GT Mask")
+        btnLoadGtMask = QPushButton("Load GT Mask (Fails for some craters)")
         btnLoadGtMask.clicked.connect(self.loadGtMask)
         file_layout.addWidget(btnLoadGtMask)
         
-        btn_save_annotations = QPushButton("Save Annotations (CSV)")
+        btn_save_annotations = QPushButton("Save Annotations (.csv)")
         btn_save_annotations.clicked.connect(self.save_annotations_csv)
         file_layout.addWidget(btn_save_annotations)
         
@@ -677,7 +670,7 @@ class CraterAnnotatorApp(QMainWindow):
             self,
             "Open Annotations",
             "",
-            "Annotation Files (*.csv *.json);;All Files (*)"
+            "Annotation Files (*.csv);;All Files (*)"
         )
         
         if file_path:
@@ -723,7 +716,7 @@ class CraterAnnotatorApp(QMainWindow):
                             rotation=np.degrees(theta)
                         ))
                         count += 1
-                        
+
                 self.canvas.update_display()
                 self.update_statistics()
                 QMessageBox.information(self, "Success", f"Loaded {count} annotations from GT Mask.")
