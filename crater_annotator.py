@@ -214,7 +214,7 @@ class ImageCanvas(QLabel):
                 
                 # Draw center point
                 painter.drawEllipse(QRectF(
-                    ellipse.center_x - 0.5, ellipse.center_y - 0.5, 1, 1
+                    ellipse.center_x - 0.25, ellipse.center_y - 0.25, 0.5, 0.5
                 ))
             
             # Draw current drawing ellipse
@@ -335,7 +335,7 @@ class ImageCanvas(QLabel):
                 rx = abs(x2 - x1) / 2
                 ry = abs(y2 - y1) / 2
                 
-                if rx > 1 and ry > 1:  # Minimum size threshold
+                if rx >= 1.0 and ry >= 1.0:  # Minimum size threshold
                     cx = (x1 + x2) / 2
                     cy = (y1 + y2) / 2
                     
