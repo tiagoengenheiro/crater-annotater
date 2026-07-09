@@ -481,6 +481,7 @@ class CraterAnnotatorApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Mars Crater Annotation Tool")
         self.setGeometry(100, 100, 1400, 900)
+        self.settings = QSettings("MarsCraterAnnotator", "CraterAnnotator")
         
         # Initialize UI
         self.init_ui()
@@ -490,6 +491,16 @@ class CraterAnnotatorApp(QMainWindow):
         self.current_annotation_path: Optional[str] = None
         self.labels_json_path: Optional[str] = None
         self.labels_cache: Optional[dict] = None
+
+    def get_last_dialog_directory(self, key: str, fallback: str = "") -> str:
+        """Return the last directory used for a file dialog."""
+        stored = self.settings.value(f"dialog_dirs/{key}", fallback)
+        return stored if stored else fallback
+
+    def set_last_dialog_directory(self, key: str, file_path: str):
+        """Persist the directory used by a file dialog."""
+        if file_path:
+            self.settings.setValue(f"dialog_dirs/{key}", str(Path(file_path).parent))
     
     def init_ui(self):
         """Initialize the user interface."""
@@ -666,11 +677,12 @@ class CraterAnnotatorApp(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Open Image",
-            "",
+            self.get_last_dialog_directory("load_image"),
             "Image Files (*.png *.jpg *.jpeg *.tif *.tiff);;All Files (*)"
         )
         
         if file_path:
+            self.set_last_dialog_directory("load_image", file_path)
             if self.canvas.load_image(file_path):
                 self.current_image_path = file_path
                 self.setWindowTitle(f"Mars Crater Annotation Tool - {Path(file_path).name}")
@@ -684,11 +696,12 @@ class CraterAnnotatorApp(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Open Annotations",
-            "",
+            self.get_last_dialog_directory("load_annotations"),
             "Annotation Files (*.csv);;All Files (*)"
         )
         
         if file_path:
+            self.set_last_dialog_directory("load_annotations", file_path)
             if self.canvas.load_annotations(file_path):
                 self.current_annotation_path = file_path
                 self.update_statistics()
@@ -752,7 +765,7 @@ class CraterAnnotatorApp(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Open Labels JSON",
-            "",
+            self.get_last_dialog_directory("load_labels_json"),
             "JSON Files (*.json);;All Files (*)"
         )
 
@@ -760,6 +773,7 @@ class CraterAnnotatorApp(QMainWindow):
             return
 
         try:
+            self.set_last_dialog_directory("load_labels_json", file_path)
             with open(file_path, "r") as f:
                 self.labels_cache = json.load(f)
                 self.labels_json_path = file_path
@@ -829,14 +843,16 @@ class CraterAnnotatorApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "No ellipses to save.")
             return
         
-        defaultName = ""
-        if self.current_image_path:
-            defaultName = Path(self.current_image_path).with_suffix('.csv').name
+        defaultDir = self.get_last_dialog_directory(
+            "save_annotations_csv",
+            str(Path(self.current_image_path).parent) if self.current_image_path else ""
+        )
+        defaultName = Path(self.current_image_path).with_suffix('.csv').name if self.current_image_path else ""
             
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Annotations",
-            defaultName,
+            str(Path(defaultDir) / defaultName) if defaultDir else defaultName,
             "CSV Files (*.csv);;All Files (*)"
         )
         
@@ -845,6 +861,7 @@ class CraterAnnotatorApp(QMainWindow):
                 file_path += '.csv'
             
             if self.canvas.export_to_csv(file_path):
+                self.set_last_dialog_directory("save_annotations_csv", file_path)
                 self.current_annotation_path = file_path
                 QMessageBox.information(self, "Success", f"Saved {len(self.canvas.ellipses)} annotations to CSV.")
             else:
@@ -856,14 +873,16 @@ class CraterAnnotatorApp(QMainWindow):
             QMessageBox.warning(self, "Warning", "No ellipses to export.")
             return
         
-        defaultName = ""
-        if self.current_image_path:
-            defaultName = Path(self.current_image_path).with_suffix('.png').name
+        defaultDir = self.get_last_dialog_directory(
+            "export_mask",
+            str(Path(self.current_image_path).parent) if self.current_image_path else ""
+        )
+        defaultName = Path(self.current_image_path).with_suffix('.png').name if self.current_image_path else ""
             
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Mask",
-            defaultName,
+            str(Path(defaultDir) / defaultName) if defaultDir else defaultName,
             "PNG Files (*.png);;All Files (*)"
         )
         
@@ -872,6 +891,7 @@ class CraterAnnotatorApp(QMainWindow):
                 file_path += '.png'
             
             if self.canvas.export_to_mask(file_path):
+                self.set_last_dialog_directory("export_mask", file_path)
                 QMessageBox.information(
                     self, 
                     "Success", 
