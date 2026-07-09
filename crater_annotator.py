@@ -381,6 +381,30 @@ class ImageCanvas(QLabel):
                 self.select_ellipse(new_ellipse)
                 self.update_display()
         
+        elif event.key() == Qt.Key_Up and self.selected_ellipse:
+            # Arrow Up: Move selected ellipse up 1 pixel
+            self.selected_ellipse.center_y -= 1
+            self.update_display()
+            self.ellipse_modified.emit(self.selected_ellipse)
+        
+        elif event.key() == Qt.Key_Down and self.selected_ellipse:
+            # Arrow Down: Move selected ellipse down 1 pixel
+            self.selected_ellipse.center_y += 1
+            self.update_display()
+            self.ellipse_modified.emit(self.selected_ellipse)
+        
+        elif event.key() == Qt.Key_Left and self.selected_ellipse:
+            # Arrow Left: Move selected ellipse left 1 pixel
+            self.selected_ellipse.center_x -= 1
+            self.update_display()
+            self.ellipse_modified.emit(self.selected_ellipse)
+        
+        elif event.key() == Qt.Key_Right and self.selected_ellipse:
+            # Arrow Right: Move selected ellipse right 1 pixel
+            self.selected_ellipse.center_x += 1
+            self.update_display()
+            self.ellipse_modified.emit(self.selected_ellipse)
+        
         elif event.key() == Qt.Key_Escape:
             # Cancel drawing
             if self.drawing_mode:
@@ -596,6 +620,7 @@ class CraterAnnotatorApp(QMainWindow):
             "• Ctrl+Click & Drag: Force new ellipse<br>"
             "• Click on ellipse: Select<br>"
             "• Drag ellipse: Move<br>"
+            "• Arrow Keys: Move selected ellipse <br>"
             "• Shift+Click edge: Resize ellipse<br>"
             "• Right-click: Delete ellipse<br>"
             "• Delete key: Remove selected<br>"
