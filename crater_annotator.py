@@ -367,7 +367,7 @@ class ImageCanvas(QLabel):
         elif event.key() == Qt.Key_C and event.modifiers() & Qt.ControlModifier:
             # Ctrl+C: Copy selected ellipse with offset
             if self.selected_ellipse:
-                offset = self.selected_ellipse.radius_x * 2.5  # Offset by ~2.5x the x-radius
+                offset = self.selected_ellipse.radius_x * 2 + 2  # Offset by ~2 the radius to the right + 2 pixels
                 new_ellipse = Ellipse(
                     center_x=self.selected_ellipse.center_x + offset,
                     center_y=self.selected_ellipse.center_y,
