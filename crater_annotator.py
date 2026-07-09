@@ -364,6 +364,23 @@ class ImageCanvas(QLabel):
             self.ellipse_selected.emit(None)
             self.update_display()
         
+        elif event.key() == Qt.Key_C and event.modifiers() & Qt.ControlModifier:
+            # Ctrl+C: Copy selected ellipse with offset
+            if self.selected_ellipse:
+                offset = self.selected_ellipse.radius_x * 2.5  # Offset by ~2.5x the x-radius
+                new_ellipse = Ellipse(
+                    center_x=self.selected_ellipse.center_x + offset,
+                    center_y=self.selected_ellipse.center_y,
+                    radius_x=self.selected_ellipse.radius_x,
+                    radius_y=self.selected_ellipse.radius_y,
+                    rotation=self.selected_ellipse.rotation,
+                    label=self.selected_ellipse.label
+                )
+                self.ellipses.append(new_ellipse)
+                self.ellipse_added.emit(new_ellipse)
+                self.select_ellipse(new_ellipse)
+                self.update_display()
+        
         elif event.key() == Qt.Key_Escape:
             # Cancel drawing
             if self.drawing_mode:
@@ -582,6 +599,7 @@ class CraterAnnotatorApp(QMainWindow):
             "• Shift+Click edge: Resize ellipse<br>"
             "• Right-click: Delete ellipse<br>"
             "• Delete key: Remove selected<br>"
+            "• Ctrl+C: Copy selected ellipse to the side<br>"
             "• Esc: Cancel drawing<br>"
             "• Ctrl+Mouse Wheel: Zoom in/out"
         )
