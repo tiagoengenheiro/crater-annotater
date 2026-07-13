@@ -382,26 +382,26 @@ class ImageCanvas(QLabel):
                 self.update_display()
         
         elif event.key() == Qt.Key_Up and self.selected_ellipse:
-            # Arrow Up: Move selected ellipse up 1 pixel
-            self.selected_ellipse.center_y -= 1
+            # Arrow Up: Move selected ellipse up 0.5 pixel
+            self.selected_ellipse.center_y -= 0.5
             self.update_display()
             self.ellipse_modified.emit(self.selected_ellipse)
         
         elif event.key() == Qt.Key_Down and self.selected_ellipse:
-            # Arrow Down: Move selected ellipse down 1 pixel
-            self.selected_ellipse.center_y += 1
+            # Arrow Down: Move selected ellipse down 0.5 pixel
+            self.selected_ellipse.center_y += 0.5
             self.update_display()
             self.ellipse_modified.emit(self.selected_ellipse)
         
         elif event.key() == Qt.Key_Left and self.selected_ellipse:
-            # Arrow Left: Move selected ellipse left 1 pixel
-            self.selected_ellipse.center_x -= 1
+            # Arrow Left: Move selected ellipse left 0.5 pixel
+            self.selected_ellipse.center_x -= 0.5
             self.update_display()
             self.ellipse_modified.emit(self.selected_ellipse)
         
         elif event.key() == Qt.Key_Right and self.selected_ellipse:
-            # Arrow Right: Move selected ellipse right 1 pixel
-            self.selected_ellipse.center_x += 1
+            # Arrow Right: Move selected ellipse right 0.5 pixel
+            self.selected_ellipse.center_x += 0.5
             self.update_display()
             self.ellipse_modified.emit(self.selected_ellipse)
         
@@ -642,12 +642,14 @@ class CraterAnnotatorApp(QMainWindow):
         self.spin_center_x = QDoubleSpinBox()
         self.spin_center_x.setRange(0, 10000)
         self.spin_center_x.setDecimals(1)
+        self.spin_center_x.setSingleStep(0.5)
         self.spin_center_x.valueChanged.connect(self.update_selected_ellipse)
         props_layout.addRow("Center X:", self.spin_center_x)
         
         self.spin_center_y = QDoubleSpinBox()
         self.spin_center_y.setRange(0, 10000)
         self.spin_center_y.setDecimals(1)
+        self.spin_center_y.setSingleStep(0.5)
         self.spin_center_y.valueChanged.connect(self.update_selected_ellipse)
         props_layout.addRow("Center Y:", self.spin_center_y)
         
