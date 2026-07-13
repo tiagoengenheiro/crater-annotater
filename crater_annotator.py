@@ -656,14 +656,14 @@ class CraterAnnotatorApp(QMainWindow):
         self.spin_radius_x = QDoubleSpinBox()
         self.spin_radius_x.setRange(1, 5000)
         self.spin_radius_x.setDecimals(1)
-        self.spin_radius_x.setSingleStep(0.5)
+        self.spin_radius_x.setSingleStep(0.1)
         self.spin_radius_x.valueChanged.connect(self.update_selected_ellipse)
         props_layout.addRow("Radius X:", self.spin_radius_x)
 
         self.spin_radius_y = QDoubleSpinBox()
         self.spin_radius_y.setRange(1, 5000)
         self.spin_radius_y.setDecimals(1)
-        self.spin_radius_y.setSingleStep(0.5)
+        self.spin_radius_y.setSingleStep(0.1)
         self.spin_radius_y.valueChanged.connect(self.update_selected_ellipse)
         props_layout.addRow("Radius Y:", self.spin_radius_y)
         
